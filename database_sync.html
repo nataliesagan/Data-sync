@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Sync Example</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pouchdb/7.3.0/pouchdb.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const localDb = new PouchDB('local_storage');
+        let syncTimes = [];  
+        let dataCounts = []; 
+
+        const initializeDb = async () => {
+            try {
+                await localDb.bulkDocs([{
+                        _id: 'user_1',
+                        username: 'john_doe',
+                        email: 'john.doe@example.com',
+                        preferences: { theme: 'dark', notifications: true },
+                        comment: 'Hello, I love coding!'
+                    },
+                    {
+                        _id: 'user_2',
+                        username: 'jane_smith',
+                        email: 'jane.smith@example.com',
+                        preferences: { theme: 'light', notifications: false }
+                    }
+                ]);
+                console.log('Database initialized successfully');
+                displayUsers();  // Відображаємо користувачів після ініціалізації
+            } catch (error) {
+                console.error('Error initializing database:', error);
+            }
+        };
+
+const syncDatabase = async () => {
+    const startTime = Date.now();
+    try {
+        const remoteDb = new PouchDB('http://127.0.0.1:5984/remote_storage', {
+            auth: { username: 'nata', password: '2649941' },
+            create_target: true
+        });
+
+        document.getElementById('progressContainer').style.display = 'block';
+        document.getElementById('progressLabel').style.display = 'block';
+        const progressBar = document.getElementById('progressBar');
+        progressBar.style.animation = 'none'; // скидаємо стару анімацію
+        progressBar.offsetHeight; // перезапуск анімації
+        progressBar.style.animation = 'loadingBar 3s linear forwards';
+
+async function forceResaveAllUsers() {
+const allDocs = await localDb.allDocs({ include_docs: true });
+for (const row of allDocs.rows) {
+  const doc = row.doc;
+  await localDb.put(doc);
+}
+}
+
+forceResaveAllUsers();
+
+const result = await localDb.replicate.to(remoteDb, {
+    live: false,
+    retry: false,
+    complete: function () {
+        document.getElementById('progressBar').style.width = '100%';
+        setTimeout(() => {
+    document.getElementById('progressContainer').style.display = 'none';
+    document.getElementById('progressLabel').style.display = 'none';
+}, 2000); // синхронізовано з 3-секундною анімацією
+    },
+    onChange: function (info) {
+        const totalDocs = info.docs_written || 1;
+        const progress = Math.min(100, (totalDocs * 10)); // Примітивна оцінка
+        document.getElementById('progressBar').style.width = `${progress}%`;
+    }
+});
+        const endTime = Date.now();
+        const syncTime = endTime - startTime;
+        console.log('Replication successful:', result);
+        console.log(`Replication time: ${syncTime} ms`);
+document.getElementById('syncTime').innerText = `Time taken for sync: ${syncTime} ms`;
+
+        // Store sync time and data count
+        syncTimes.push(syncTime);
+
+        const allDocs = await localDb.allDocs({ include_docs: true });
+
+        let totalChars = 0;
+
+        // Підрахуємо кількість символів в кожному введеному полі
+        allDocs.rows.forEach(row => {
+            const user = row.doc;
+            const usernameLength = user.username ? user.username.length : 0;
+            const emailLength = user.email ? user.email.length : 0;
+            const commentLength = user.comment ? user.comment.length : 0;
+            const themeLength = user.preferences && user.preferences.theme ? user.preferences.theme.length : 0;
+
+            totalChars += usernameLength + emailLength + commentLength + themeLength;
+        });
+
+        dataCounts.push(totalChars);
+
+        console.log(syncTimes, dataCounts);
+
+        // Update chart
+        updateChart();
+
+        displayUsers();
+    } catch (error) {
+        console.error('Replication failed:', error);
+    }
+};
+
+
+        // Виведення користувачів на сторінку
+const displayUsers = async () => {
+    const usersContainer = document.getElementById('users');
+    usersContainer.innerHTML = '';
+
+    try {
+        const allDocs = await localDb.allDocs({ include_docs: true, limit: 100 }); // обмежуємо
+        allDocs.rows.forEach(row => {
+            const user = row.doc;
+            const preferences = user.preferences || {};
+            const theme = preferences.theme || 'N/A';
+
+            const userDiv = document.createElement('div');
+            userDiv.classList.add('user');
+            userDiv.innerHTML = `
+                <h3>${user.username}</h3>
+                <p><strong>Email:</strong> ${user.email}</p>
+                <p><strong>Theme:</strong> ${theme}</p>
+                <p><strong>Notifications:</strong> ${preferences.notifications !== undefined ? preferences.notifications : 'N/A'}</p>
+                <p><strong>Comment:</strong> ${user.comment || 'No comment'}</p>
+                <hr>
+            `;
+            usersContainer.appendChild(userDiv);
+        });
+    } catch (error) {
+        console.error('Error displaying users:', error);
+    }
+};
+
+        // Додавання нового користувача до локальної бази
+        const addUser = async () => {
+            const username = document.getElementById('username').value;
+            const email = document.getElementById('email').value;
+            const theme = document.getElementById('theme').value;
+            const notifications = document.getElementById('notifications').checked;
+            const comment = document.getElementById('comment').value;
+
+            const newUser = {
+                _id: 'user_' + Date.now(),
+                username: username,
+                email: email,
+                preferences: { theme: theme, notifications: notifications },
+                comment: comment
+            };
+
+            try {
+                await localDb.put(newUser);
+                console.log('New user added successfully');
+                displayUsers();  // Оновлюємо список користувачів
+            } catch (error) {
+                console.error('Error adding user:', error);
+            }
+        };
+
+        // Ініціалізація бази при завантаженні сторінки
+        window.onload = async () => {
+    await initializeDb();
+    document.addEventListener('DOMContentLoaded', () => {
+        if (syncTimes.length > 0 && dataCounts.length > 0) {
+            updateChart();
+        } else {
+            console.log("Chart data is empty.");
+        }
+    });
+};
+
+            let chartInstance;  // Declare chartInstance outside to make it global
+
+    const updateChart = () => {
+    const ctx = document.getElementById('syncChart').getContext('2d');
+
+    if (chartInstance) {
+        chartInstance.destroy(); // Удаляем старый график перед созданием нового
+    }
+
+    if (syncTimes.length > 0 && dataCounts.length > 0) {
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: dataCounts,  // Використовуємо кількість користувачів
+                datasets: [{
+                    label: 'Sync Time (ms)',
+                    data: syncTimes,
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 2,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    x: { 
+                        title: { display: true, text: 'Кількість введених даних' }  // Зміна осі X
+                    },
+                    y: { 
+                        title: { display: true, text: 'Час синхронізації (мс)' } 
+                    }
+                }
+            }
+        });
+    } else {
+        console.log("Не вистачає даних для побудови графіка.");
+    }
+};
+    </script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 40px;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            font-size: 2.5rem;
+        }
+
+        p {
+            font-size: 1.2rem;
+            text-align: center;
+            color: #666;
+        }
+
+        .button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            text-align: center;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background-color 0.3s ease;
+            display: inline-block;
+            margin-top: 20px;
+            text-decoration: none;
+        }
+
+        .button:hover {
+            background-color: #0056b3;
+        }
+
+        #syncTime {
+            margin-top: 30px;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            color: #333;
+        }
+
+        #users {
+            margin-top: 40px;
+        }
+
+        .user {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .user:hover {
+            transform: scale(1.05);
+        }
+
+        .user h3 {
+            margin-top: 0;
+            color: #007BFF;
+            font-size: 1.5rem;
+        }
+
+        .user p {
+            font-size: 1rem;
+            color: #555;
+        }
+
+        form {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            margin: 0 auto;
+            max-width: 500px;
+            margin-bottom: 40px;
+        }
+
+        label {
+            font-size: 1rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        input[type="text"], input[type="email"] {
+            padding: 10px;
+            margin: 10px 0 20px 0;
+            width: 100%;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 1rem;
+            transition: border 0.3s ease;
+        }
+
+        input[type="text"]:focus, input[type="email"]:focus {
+            border-color: #007BFF;
+            outline: none;
+        }
+
+        input[type="checkbox"] {
+            margin-top: 10px;
+        }
+
+        .form-container {
+            text-align: center;
+        }
+
+        .form-container button {
+            padding: 12px 30px;
+            background-color: #28a745;
+        }
+
+.content-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px; /* Расстояние между графиком и формой */
+    max-width: 1200px;
+    margin: 40px auto;
+}
+
+canvas {
+    flex: 1;
+    max-width: 600px;
+    height: 400px;
+}
+
+.form-container {
+    flex: 1;
+    max-width: 400px;
+}
+
+
+.navbar {
+    background-color: #007BFF;
+    padding: 10px 0;
+    position: sticky;
+    top: 0;
+    z-index: 999;
+}
+
+.navbar ul {
+    list-style: none;
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin: 0;
+    padding: 0;
+}
+
+.navbar a {
+    color: white;
+    text-decoration: none;
+    font-weight: bold;
+    font-size: 1.1rem;
+    transition: color 0.3s ease;
+}
+
+.navbar a:hover {
+    color: #FFD700;
+}
+
+#progressContainer {
+    width: 100%;
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    height: 20px;
+}
+
+#progressBar {
+    height: 100%;
+    background-color: #28a745; /* зелений */
+    width: 0%;
+    animation: loadingBar 2s linear forwards; /* додана анімація */
+}
+
+@keyframes loadingBar {
+    from { width: 0%; }
+    to { width: 100%; }
+}
+
+
+    </style>
+</head>
+<body>
+    <nav style="background-color: #007BFF; padding: 15px; text-align: center;">
+        <a href="#registration" style="color: white; margin: 0 15px; text-decoration: none; font-size: 18px;">Реєстрація</a>
+        <a href="#users-section" style="color: white; margin: 0 15px; text-decoration: none; font-size: 18px;">Користувачі</a>
+    </nav>
+
+    <h1>Sync Local and Remote Databases</h1>
+    <p>Press the button below to synchronize the local database with the remote server.</p>
+
+    <div style="display: flex; justify-content: center; align-items: flex-start; gap: 40px;">
+        <!-- Форма для додавання користувача -->
+        <div class="form-container" id="registration">
+    <form id="addUserForm">
+        <label for="username">Username:</label>
+        <input type="text" id="username" placeholder="Enter your username" required>
+
+        <label for="email">Email:</label>
+        <input type="email" id="email" placeholder="Enter your email address" required>
+
+        <label for="theme">Theme:</label>
+        <input type="text" id="theme" placeholder="Select: dark/light" required>
+
+        <label for="comment">Comment:</label>
+        <input type="text" id="comment" placeholder="Enter your comment">
+
+        <label for="notifications">Notifications:</label>
+        <input type="checkbox" id="notifications">
+
+        <button type="button" class="button" onclick="addUser()">
+            <i class="fas fa-user-plus"></i> Add User
+        </button>
+    </form>
+
+    <button class="button" onclick="syncDatabase()">
+        <i class="fas fa-sync-alt"></i> Synchronize
+    </button>
+
+</div>
+
+        <!-- Графік синхронізації -->
+        <div style="max-width: 600px;">
+            <canvas id="syncChart" width="600" height="400"></canvas>
+          <div id="progressContainer" style="margin-top: 20px; display: none;">
+             <div id="progressBar"></div>
+            </div>
+            <div id="progressLabel" style="text-align: center; margin-top: 10px; display: none; color: #555; font-size: 16px;">
+                Синхронізація...
+            </div>
+            <div id="syncTime" style="text-align: center; margin-top: 20px; font-size: 18px; font-weight: bold;">
+                <!-- Час синхронізації буде відображено тут -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Секція користувачів -->
+    <div id="users-section">
+        <h2 style="text-align: center; margin-top: 50px;">Користувачі</h2>
+        <div id="users">
+            <!-- Сюди будуть виведені користувачі після синхронізації -->
+        </div>
+    </div>
+</body>
+</html>
